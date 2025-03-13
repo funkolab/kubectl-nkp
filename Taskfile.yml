@@ -1,0 +1,27 @@
+version: "3"
+
+tasks:
+  build:
+    desc: Build the application
+    cmds:
+      - go build -o bin/kubectl-nkp .
+
+  install:
+    desc: Install the application
+    cmds:
+      - go install ./...
+
+  test:
+    desc: Run tests
+    cmds:
+      - go test ./... -v
+
+  lint:
+    desc: Lint the code
+    cmds:
+      - if command -v golangci-lint > /dev/null; then golangci-lint run; else echo "golangci-lint not installed"; fi
+
+  run:
+    desc: Run the application
+    cmds:
+      - go run main.go
