@@ -20,7 +20,7 @@ builds:
       - -s -w
 archives:
   - builds:
-      - nkp-catalog
+      - kubectl-nkp
     name_template: "{{ .ProjectName }}_{{ .Tag }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
     wrap_in_directory: false
     formats: [tar.gz]
