@@ -21,6 +21,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"time"
 
 	"github.com/ktr0731/go-fuzzyfinder"
@@ -55,34 +56,73 @@ var connectCmd = &cobra.Command{
 	Short: "Connect to a NKP workload cluster",
 	Long:  `Connect to a NKP workload cluster by selecting a cluster and using the kubeconfig stored in a secret.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		// Path to the kubeconfig file
+		// Path to the kubeconfig directory
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
 			fmt.Printf("Error getting home directory: %v\n", err)
-			return
+			cobra.CheckErr(err)
 		}
 
-		nkpKubeconfigPath := filepath.Join(homeDir, ".kube", "nkp", "config")
+		nkpKubeconfigDir := filepath.Join(homeDir, ".kube", "nkp")
 
-		// Build config from kubeconfig file
-		config, err := clientcmd.BuildConfigFromFlags("", nkpKubeconfigPath)
+		// List kubeconfig files in the directory
+		files, err := os.ReadDir(nkpKubeconfigDir)
+		if err != nil {
+			cobra.CheckErr(err)
+		}
+
+		var kubeconfigFiles []string
+		for _, file := range files {
+			if !file.IsDir() {
+				kubeconfigFiles = append(kubeconfigFiles, filepath.Join(nkpKubeconfigDir, file.Name()))
+			}
+		}
+
+		if len(kubeconfigFiles) == 0 {
+			cobra.CheckErr(fmt.Errorf("No kubeconfig files found in %s", nkpKubeconfigDir))
+		}
+
+		// Sort kubeconfigFiles for predictable order
+		sort.Strings(kubeconfigFiles)
+
+		var selectedKubeconfig string
+		if len(kubeconfigFiles) == 1 {
+			selectedKubeconfig = kubeconfigFiles[0]
+			fmt.Printf("Using kubeconfig: %s\n", filepath.Base(selectedKubeconfig))
+		} else {
+			idx, err := fuzzyfinder.Find(
+				kubeconfigFiles,
+				func(i int) string {
+					return filepath.Base(kubeconfigFiles[i])
+				},
+				fuzzyfinder.WithPromptString("Select management kubeconfig > "),
+			)
+			if err != nil {
+				cobra.CheckErr(err)
+			}
+			selectedKubeconfig = kubeconfigFiles[idx]
+			fmt.Printf("Using kubeconfig: %s\n", filepath.Base(selectedKubeconfig))
+		}
+
+		// Build config from selected kubeconfig file
+		config, err := clientcmd.BuildConfigFromFlags("", selectedKubeconfig)
 		if err != nil {
 			fmt.Printf("Error building kubeconfig: %v\n", err)
-			os.Exit(1)
+			cobra.CheckErr(err)
 		}
 
 		// Create dynamic client for ClusterAPI resources
 		dynamicClient, err := dynamic.NewForConfig(config)
 		if err != nil {
 			fmt.Printf("Error creating dynamic client: %v\n", err)
-			os.Exit(1)
+			cobra.CheckErr(err)
 		}
 
 		// Create client for core resources (secrets)
 		clientset, err := kubernetes.NewForConfig(config)
 		if err != nil {
 			fmt.Printf("Error creating kubernetes client: %v\n", err)
-			os.Exit(1)
+			cobra.CheckErr(err)
 		}
 
 		ctx := context.Background()
@@ -93,20 +133,20 @@ var connectCmd = &cobra.Command{
 
 		if listErr != nil {
 			fmt.Printf("Error listing Cluster API clusters: %v\n", listErr)
-			os.Exit(1)
+			cobra.CheckErr(listErr)
 		}
 
 		var filteredClusterItems []unstructured.Unstructured
-		for _, item := range clusterList.Items {
-			// Skip clusters in the default namespace
-			if item.GetNamespace() != "default" {
-				filteredClusterItems = append(filteredClusterItems, item)
-			}
-		}
+		// for _, item := range clusterList.Items {
+		// 	// Skip clusters in the default namespace
+		// 	if item.GetNamespace() != "default" {
+		// 		filteredClusterItems = append(filteredClusterItems, item)
+		// 	}
+		// }
+		filteredClusterItems = append(filteredClusterItems, clusterList.Items...)
 
 		if len(filteredClusterItems) == 0 {
-			fmt.Println("No CAPI clusters found in the kubernetes cluster")
-			return
+			cobra.CheckErr(fmt.Errorf("no CAPI clusters found in the kubernetes cluster"))
 		}
 
 		clusterItems := filteredClusterItems
@@ -141,7 +181,7 @@ var connectCmd = &cobra.Command{
 			)
 
 			if err != nil {
-				return
+				cobra.CheckErr(err)
 			}
 		}
 
@@ -161,16 +201,14 @@ var connectCmd = &cobra.Command{
 			// Extract kubeconfig data
 			kubeconfigData, ok := secret.Data["value"]
 			if !ok {
-				fmt.Printf("Secret '%s' does not contain kubeconfig data under 'value' key\n", secretName)
-				return
+				cobra.CheckErr(fmt.Errorf("Secret '%s' does not contain kubeconfig data under 'value' key", secretName))
 			}
 
 			// Use the kubeconfig data
 			useKubeconfigData(kubeconfigData)
 			return
 		} else {
-			fmt.Printf("Could not find secret '%s' in namespace '%s': %v\n", secretName, clusterNamespace, err)
-			return
+			cobra.CheckErr(fmt.Errorf("Could not find secret '%s' in namespace '%s': %v", secretName, clusterNamespace, err))
 		}
 
 	},
@@ -183,14 +221,14 @@ func useKubeconfigData(kubeconfigData []byte) {
 	tempFile, err := os.CreateTemp("", "kubeconfig-*.yaml")
 	if err != nil {
 		fmt.Printf("Error creating temporary file: %v\n", err)
-		return
+		cobra.CheckErr(err)
 	}
 	defer tempFile.Close()
 
 	// Write the kubeconfig to the temporary file
 	if _, err := tempFile.Write(kubeconfigData); err != nil {
 		fmt.Printf("Error writing to temporary file: %v\n", err)
-		return
+		cobra.CheckErr(err)
 	}
 
 	// Launch a new shell with KUBECONFIG set to the temporary file

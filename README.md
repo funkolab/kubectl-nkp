@@ -1,23 +1,25 @@
 # kubectl-nkp
 
-`kubectl-nkp` is a CLI tool to connect easily to NKP workload clusters.
+A kubectl plugin to connect to NKP workload clusters using Cluster API.
 
 ## Features
 
-- List and select NKP workload clusters using fuzzy finder.
-- Connect to selected cluster and launch a temporary shell with the corresponding kubeconfig.
+- List NKP clusters
+- Use kubeconfig secrets stored in the mgmt cluster to connect
+- **Support multiple management kubeconfig files in `~/.kube/nkp/`** (user is prompted to select one if more than one is present)
+- Connect to the selected cluster and launch a temporary shell with the corresponding kubeconfig.
 
 ## Usage
 
-Your management cluster kubeconfig need to be put in the following path: `~/.kube/nkp/config`.
-
-To use `kubectl-nkp`, run the following command:
-
-```sh
-kubectl nkp connect
-```
-
-This will list the available NKP workload clusters and allow you to select one using a fuzzy finder. Once selected, it will launch a shell with the kubeconfig for the selected cluster. If there is only one cluster available, it will connect to that cluster directly.
+1. Place one or more management cluster kubeconfig files in `~/.kube/nkp/`.
+   - Each file should be a valid kubeconfig for a management cluster.
+2. Run:
+   ```sh
+   kubectl nkp connect
+   ```
+3. If multiple kubeconfig files are present, you will be prompted to select one.
+4. Select a Cluster API cluster from the list.
+5. A shell will be launched with `KUBECONFIG` set to the selected workload cluster's kubeconfig.
 
 ## Development
 
