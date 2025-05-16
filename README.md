@@ -1,6 +1,6 @@
 # kubectl-nkp
 
-A kubectl plugin to connect to NKP workload clusters using Cluster API.
+A kubectl plugin to connect to NKP clusters using Cluster API.
 
 ## Features
 
