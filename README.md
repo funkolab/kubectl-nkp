@@ -4,10 +4,10 @@ A kubectl plugin to connect to NKP workload clusters using Cluster API.
 
 ## Features
 
-- Lists NKP clusters
-- Uses kubeconfig secrets stored in the mgmt cluster to connect
-- **Supports multiple management kubeconfig files in `~/.kube/nkp/`** (user is prompted to select one if more than one is present)
-- Connect to selected cluster and launch a temporary shell with the corresponding kubeconfig.
+- List NKP clusters
+- Use kubeconfig secrets stored in the mgmt cluster to connect
+- **Support multiple management kubeconfig files in `~/.kube/nkp/`** (user is prompted to select one if more than one is present)
+- Connect to the selected cluster and launch a temporary shell with the corresponding kubeconfig.
 
 ## Usage
 
