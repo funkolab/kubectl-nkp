@@ -56,6 +56,7 @@ var connectCmd = &cobra.Command{
 	Short: "Connect to a NKP workload cluster",
 	Long:  `Connect to a NKP workload cluster by selecting a cluster and using the kubeconfig stored in a secret.`,
 	Run: func(cmd *cobra.Command, args []string) {
+		permanent, _ := cmd.Flags().GetBool("permanent")
 		// Path to the kubeconfig directory
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
@@ -204,14 +205,77 @@ var connectCmd = &cobra.Command{
 				cobra.CheckErr(fmt.Errorf("Secret '%s' does not contain kubeconfig data under 'value' key", secretName))
 			}
 
-			// Use the kubeconfig data
-			useKubeconfigData(kubeconfigData)
+			// Use the kubeconfig data based on the permanent flag
+			if permanent {
+				copyKubeconfigToPermanentLocation(kubeconfigData, clusterName)
+			} else {
+				useKubeconfigData(kubeconfigData)
+			}
 			return
 		} else {
 			cobra.CheckErr(fmt.Errorf("Could not find secret '%s' in namespace '%s': %v", secretName, clusterNamespace, err))
 		}
 
 	},
+}
+
+// copyKubeconfigToPermanentLocation copies the kubeconfig data to ~/.kube/config
+func copyKubeconfigToPermanentLocation(kubeconfigData []byte, clusterName string) {
+	// Get the home directory
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Printf("Error getting home directory: %v\n", err)
+		cobra.CheckErr(err)
+	}
+
+	kubeDir := filepath.Join(homeDir, ".kube")
+	kubeconfigPath := filepath.Join(kubeDir, "config")
+
+	// Create .kube directory if it doesn't exist
+	if err := os.MkdirAll(kubeDir, 0755); err != nil {
+		fmt.Printf("Error creating .kube directory: %v\n", err)
+		cobra.CheckErr(err)
+	}
+
+	// Check if ~/.kube/config already exists and create backup
+	if _, err := os.Stat(kubeconfigPath); err == nil {
+		backupPath := kubeconfigPath + ".backup"
+		if err := copyFile(kubeconfigPath, backupPath); err != nil {
+			fmt.Printf("Error creating backup of existing kubeconfig: %v\n", err)
+			cobra.CheckErr(err)
+		}
+		fmt.Printf("Existing kubeconfig backed up to: %s\n", backupPath)
+	}
+
+	// Write the new kubeconfig to ~/.kube/config
+	if err := os.WriteFile(kubeconfigPath, kubeconfigData, 0600); err != nil {
+		fmt.Printf("Error writing kubeconfig to %s: %v\n", kubeconfigPath, err)
+		cobra.CheckErr(err)
+	}
+
+	fmt.Printf("✅ Kubeconfig for cluster '%s' has been written to %s\n", clusterName, kubeconfigPath)
+	fmt.Printf("You can now use kubectl commands directly without any additional setup.\n")
+}
+
+// copyFile copies a file from src to dst
+func copyFile(src, dst string) error {
+	sourceFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer sourceFile.Close()
+
+	destFile, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer destFile.Close()
+
+	if _, err := destFile.ReadFrom(sourceFile); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // useKubeconfigData creates a temporary file with the provided kubeconfig data
@@ -255,6 +319,9 @@ func useKubeconfigData(kubeconfigData []byte) {
 
 func init() {
 	rootCmd.AddCommand(connectCmd)
+
+	// Add the permanent flag
+	connectCmd.Flags().BoolP("permanent", "p", false, "Copy kubeconfig to ~/.kube/config instead of launching a temporary shell")
 }
 
 // formatAge formats the age of a resource similar to kubectl
